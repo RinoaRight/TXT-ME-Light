@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TXT-ME CLUB</title>
+  <link rel="icon" type="image/jpeg" href="favicon.jpg" />
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/markdown.css" />
+
+  <!-- Внешние CDN-библиотеки -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     КОРЕНЬ ПРИЛОЖЕНИЯ
+     ══════════════════════════════════════════════════ -->
+<div id="app"></div>
+
+<!-- Контейнер модальных окон (вне #app) -->
+<div id="modal-root"></div>
+
+<!-- Контейнер Toast-уведомлений -->
+<div id="toast-root" class="toast-container"></div>
+
+
+<!-- ══════════════════════════════════════════════════
+     ШАБЛОНЫ (невидимы, клонируются JS)
+     ══════════════════════════════════════════════════ -->
+
+<!-- ── Основной layout (лента + сайдбар) ── -->
+<template id="tpl-layout">
+  <div class="main-container">
+    <main class="feed" id="feed-root"></main>
+    <aside class="sidebar" id="sidebar-placeholder"></aside>
+  </div>
+</template>
+
+<!-- ── Карточка поста (лента) ── -->
+<template id="tpl-post-card">
+  <article class="post-fullwidth">
+    <div class="post-header-full">
+      <div class="post-avatar-small" data-slot="avatar"></div>
+      <div class="post-header-right">
+        <h2 class="post-title">
+          <a data-slot="title-link" href="#"></a>
+        </h2>
+        <div class="post-meta">
+          <span data-slot="author" class="post-author-link" style="cursor:pointer"></span>
+          <span data-slot="role" class="post-role"></span>
+          <span data-slot="date"></span>
+        </div>
+      </div>
+    </div>
+    <div class="post-content-full">
+      <div class="markdown-content post-content" data-slot="content"></div>
+    </div>
+    <div class="post-footer-full">
+      <div data-slot="tags" class="post-tags" style="display:flex;gap:0.5rem;flex-wrap:wrap;flex:1"></div>
+      <div class="post-actions-full">
+        <button class="post-share-btn" data-slot="share">📋 Поделиться</button>
+        <a class="post-comment-link" data-slot="comment-link" href="#">
+          <span data-slot="comment-count"></span>
+        </a>
+      </div>
+    </div>
+  </article>
+</template>
+
+<!-- ── Кнопка тега ── -->
+<template id="tpl-tag-btn">
+  <button class="post-tag" data-slot="tag"></button>
+</template>
+
+<!-- ── Кнопка автора (фильтр) ── -->
+<template id="tpl-author-btn">
+  <button class="filter-btn" data-slot="author"></button>
+</template>
+
+<!-- ── Блок комментария ── -->
+<template id="tpl-comment">
+  <div class="comment-block" data-comment-id="">
+    <div class="comment-with-avatar">
+      <div class="comment-avatar-container" data-slot="avatar"></div>
+      <div>
+        <div class="comment-meta">
+          <span class="comment-author" data-slot="author"></span>
+          <span data-slot="role" class="post-role"></span>
+          <span data-slot="date"></span>
+          <span class="comment-edited hidden" data-slot="edited">(отредактирован)</span>
+        </div>
+        <div class="markdown-content" data-slot="content"></div>
+        <div class="comment-actions">
+          <button class="btn-small" data-action="reply">Ответить</button>
+          <button class="btn-small" data-action="edit" data-slot="edit-btn">Редактировать</button>
+          <button class="btn-small btn-danger" data-action="delete" data-slot="delete-btn">Удалить</button>
+        </div>
+        <div class="comment-reply-form hidden" data-slot="reply-form"></div>
+        <div class="comment-edit-form hidden" data-slot="edit-form"></div>
+        <div class="comment-replies" data-slot="replies"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── Бейдж активного фильтра ── -->
+<template id="tpl-active-filter">
+  <span class="active-filter">
+    <span data-slot="label"></span>
+    <button class="filter-remove-btn" data-slot="remove" aria-label="Снять фильтр">×</button>
+  </span>
+</template>
+
+<!-- ── Toast-уведомление ── -->
+<template id="tpl-toast">
+  <div class="toast" role="alert">
+    <span data-slot="message"></span>
+  </div>
+</template>
+
+<!-- ── Модальное окно ── -->
+<template id="tpl-modal">
+  <div class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 data-slot="title"></h2>
+        <button class="modal-close" aria-label="Закрыть">×</button>
+      </div>
+      <p class="modal-description" data-slot="description"></p>
+      <div data-slot="body"></div>
+      <div class="modal-actions" data-slot="actions"></div>
+    </div>
+  </div>
+</template>
+
+<!-- ── Элемент сетки аватаров (пикер) ── -->
+<template id="tpl-avatar-item">
+  <div class="avatar-option" tabindex="0" data-avatar-id="">
+    <img data-slot="img" alt="" />
+    <div class="avatar-hover-preview">
+      <img data-slot="preview-img" alt="" />
+      <span class="avatar-hover-label" data-slot="label"></span>
+    </div>
+  </div>
+</template>
+
+
+<!-- ══════════════════════════════════════════════════
+     JS-МОДУЛИ (порядок важен: утилиты → ядро → views)
+     ══════════════════════════════════════════════════ -->
+
+<!-- Единственная точка входа — все остальные модули подтягиваются через import -->
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
